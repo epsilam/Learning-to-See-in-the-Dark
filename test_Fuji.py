@@ -1,10 +1,13 @@
 from __future__ import division
 import os, scipy.io
-import tensorflow as tf
-import tensorflow.contrib.slim as slim
+import tensorflow.compat.v1 as tf
+import tf_slim as slim
 import numpy as np
 import rawpy
 import glob
+from toimage import toimage
+
+tf.compat.v1.disable_eager_execution()
 
 input_dir = './dataset/Fuji/short/'
 gt_dir = './dataset/Fuji/long/'
@@ -22,8 +25,8 @@ def lrelu(x):
 
 def upsample_and_concat(x1, x2, output_channels, in_channels):
     pool_size = 2
-    deconv_filter = tf.Variable(tf.truncated_normal([pool_size, pool_size, output_channels, in_channels], stddev=0.02))
-    deconv = tf.nn.conv2d_transpose(x1, deconv_filter, tf.shape(x2), strides=[1, pool_size, pool_size, 1])
+    deconv_filter = tf.Variable(tf.random.truncated_normal([pool_size, pool_size, output_channels, in_channels], stddev=0.02))
+    deconv = tf.nn.conv2d_transpose(x1, deconv_filter, tf.shape(input=x2), strides=[1, pool_size, pool_size, 1])
 
     deconv_output = tf.concat([deconv, x2], 3)
     deconv_output.set_shape([None, None, None, output_channels * 2])
@@ -68,7 +71,7 @@ def network(input):  # Unet
     conv9 = slim.conv2d(conv9, 32, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv9_2')
 
     conv10 = slim.conv2d(conv9, 27, [1, 1], rate=1, activation_fn=None, scope='g_conv10')
-    out = tf.depth_to_space(conv10, 3)
+    out = tf.compat.v1.depth_to_space(input=conv10, block_size=3)
     return out
 
 
@@ -120,13 +123,13 @@ def pack_raw(raw):
     return out
 
 
-sess = tf.Session()
-in_image = tf.placeholder(tf.float32, [None, None, None, 9])
-gt_image = tf.placeholder(tf.float32, [None, None, None, 3])
+sess = tf.compat.v1.Session()
+in_image = tf.compat.v1.placeholder(tf.float32, [None, None, None, 9])
+gt_image = tf.compat.v1.placeholder(tf.float32, [None, None, None, 3])
 out_image = network(in_image)
 
-saver = tf.train.Saver()
-sess.run(tf.global_variables_initializer())
+saver = tf.compat.v1.train.Saver()
+sess.run(tf.compat.v1.global_variables_initializer())
 ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
 if ckpt:
     print('loaded ' + ckpt.model_checkpoint_path)
@@ -172,9 +175,9 @@ for test_id in test_ids:
         scale_full = scale_full * np.mean(gt_full) / np.mean(
             scale_full)  # scale the low-light image to the same mean of the groundtruth
 
-        scipy.misc.toimage(output * 255, high=255, low=0, cmin=0, cmax=255).save(
+        toimage(output * 255, high=255, low=0, cmin=0, cmax=255).save(
             result_dir + 'final/%5d_00_%d_out.png' % (test_id, ratio))
-        scipy.misc.toimage(scale_full * 255, high=255, low=0, cmin=0, cmax=255).save(
+        toimage(scale_full * 255, high=255, low=0, cmin=0, cmax=255).save(
             result_dir + 'final/%5d_00_%d_scale.png' % (test_id, ratio))
-        scipy.misc.toimage(gt_full * 255, high=255, low=0, cmin=0, cmax=255).save(
+        toimage(gt_full * 255, high=255, low=0, cmin=0, cmax=255).save(
             result_dir + 'final/%5d_00_%d_gt.png' % (test_id, ratio))
