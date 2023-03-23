@@ -19,9 +19,10 @@ result_dir = './result_Sony/'
 # get train IDs
 train_fns = glob.glob(gt_dir + '0*.ARW')
 train_ids = [int(os.path.basename(train_fn)[0:5]) for train_fn in train_fns]
+# Saves training images and provides them with an index
 
-ps = 512  # patch size for training
-save_freq = 500
+ps = 512  # patch size for training, go to the line in training to see its application
+save_freq = 500 #A resulting jpg image of the NN is provided at every 500 epochs to show the evolution of the network
 
 DEBUG = 0
 if DEBUG == 1:
@@ -35,7 +36,7 @@ def lrelu(x):
 
 def upsample_and_concat(x1, x2, output_channels, in_channels):
     pool_size = 2
-    deconv_filter = tf.Variable(tf.random.truncated_normal([pool_size, pool_size, output_channels, in_channels], stddev=0.02))
+    deconv_filter = tf.Variable(tf.random.truncated_normal([pool_size, pool_size, output_channels, in_channels], stddev=0.02)) #Parameter storage using tf.Variable
     deconv = tf.nn.conv2d_transpose(x1, deconv_filter, tf.shape(input=x2), strides=[1, pool_size, pool_size, 1])
 
     deconv_output = tf.concat([deconv, x2], 3)
@@ -174,7 +175,7 @@ for epoch in range(lastepoch, 4001):
         xx = np.random.randint(0, W - ps)
         yy = np.random.randint(0, H - ps)
         input_patch = input_images[str(ratio)[0:3]][ind][:, yy:yy + ps, xx:xx + ps, :]
-        gt_patch = gt_images[ind][:, yy * 2:yy * 2 + ps * 2, xx * 2:xx * 2 + ps * 2, :]
+        gt_patch = gt_images[ind][:, yy * 2:yy * 2 + ps * 2, xx * 2:xx * 2 + ps * 2, :] #A random 512x512 patch is cropped, flipped rotated for data augmentation
 
         if np.random.randint(2, size=1)[0] == 1:  # random flip
             input_patch = np.flip(input_patch, axis=1)
