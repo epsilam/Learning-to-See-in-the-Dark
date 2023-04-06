@@ -13,6 +13,7 @@ import glob
 from tqdm import tqdm
 from port_toimage import toimage
 tf.disable_eager_execution()
+import datetime
 
 input_dir = './dataset/Sony/Sony/Short10Percent/'
 gt_dir = './dataset/Sony/Sony/Long10Percent/'
@@ -62,7 +63,6 @@ def network(input):
 
     conv4 = slim.conv2d(pool3, 256, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv4_1',reuse=tf.AUTO_REUSE)
     conv4 = slim.conv2d(conv4, 256, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv4_2',reuse=tf.AUTO_REUSE)
-    print("conv4", conv4.shape)
     # pool4 = slim.max_pool2d(conv4, [2, 2], padding='SAME')
 
     # conv5 = slim.conv2d(pool4, 512, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv5_1',reuse=tf.AUTO_REUSE)
@@ -85,10 +85,7 @@ def network(input):
     conv9 = slim.conv2d(conv9, 32, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv9_2',reuse=tf.AUTO_REUSE)
 
     conv10 = slim.conv2d(conv9, 12, [1, 1], rate=1, activation_fn=None, scope='g_conv10',reuse=tf.AUTO_REUSE)
-    print("conv10", conv10.shape)
     out = tf.depth_to_space(conv10, 2)
-    print("out", out.shape)
-
     return out
 #reuse = tf.AUTO_REUSE added by Hovsep
 
@@ -146,7 +143,13 @@ for folder in allfolders:
     lastepoch = np.maximum(lastepoch, int(folder[-4:]))
 
 learning_rate = 1e-4
-for epoch in tqdm(range(lastepoch, 2)):#4001 changed, tqdm added by Hovsep
+current_time = datetime.datetime.now().strftime("%Y.%m.%d-%H-%M-%S")
+train_log_dir = './log_Sony/' + current_time + '/train'
+# train_summary_writer = tf.summary.FileWriter(train_log_dir)
+# summaries = tf.summary.merge_all()
+losses = []
+
+for epoch in tqdm(range(lastepoch, 3)):#4001 changed, tqdm added by Hovsep
     if os.path.isdir(result_dir + '%04d' % epoch):
         continue
     cnt = 0
@@ -201,11 +204,12 @@ for epoch in tqdm(range(lastepoch, 2)):#4001 changed, tqdm added by Hovsep
 
         _, G_current, output = sess.run([G_opt, G_loss, out_image],
                                         feed_dict={in_image: input_patch, gt_image: gt_patch, lr: learning_rate})
+
         output = np.minimum(np.maximum(output, 0), 1)
         g_loss[ind] = G_current
-
-        print("%d %d Loss=%.3f Time=%.3f" % (epoch, cnt, np.mean(g_loss[np.where(g_loss)]), time.time() - st))
-
+        losses.append(G_current)
+        
+                
         if epoch % save_freq == 0:
             if not os.path.isdir(result_dir + '%04d' % epoch):
                 os.makedirs(result_dir + '%04d' % epoch)
