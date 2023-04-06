@@ -2,27 +2,29 @@
 # improvement upon cqf37
 from __future__ import division
 import os, time, scipy.io
-import tensorflow.compat.v1 as tf
-import tf_slim as slim
+# import tensorflow
+import tensorflow.compat.v1 as tf #Added by Hovsep
+# tf.disable_v2_behavior()
+# import tensorflow.contrib.slim as slim #Added by Hovsep
+import tf_slim as slim #Added by Hovsep
 import numpy as np
 import rawpy
 import glob
-from toimage import toimage
+from tqdm import tqdm
+from port_toimage import toimage
+tf.disable_eager_execution()
 
-tf.compat.v1.disable_eager_execution()
-
-input_dir = './dataset/Sony/short/'
-gt_dir = './dataset/Sony/long/'
+input_dir = './dataset/Sony/Sony/Short10Percent/'
+gt_dir = './dataset/Sony/Sony/Long10Percent/'
 checkpoint_dir = './result_Sony/'
 result_dir = './result_Sony/'
 
 # get train IDs
 train_fns = glob.glob(gt_dir + '0*.ARW')
 train_ids = [int(os.path.basename(train_fn)[0:5]) for train_fn in train_fns]
-# Saves training images and provides them with an index
 
-ps = 512  # patch size for training, go to the line in training to see its application
-save_freq = 500 #A resulting jpg image of the NN is provided at every 500 epochs to show the evolution of the network
+ps = 512  # patch size for training
+save_freq = 500
 
 DEBUG = 0
 if DEBUG == 1:
@@ -36,55 +38,55 @@ def lrelu(x):
 
 def upsample_and_concat(x1, x2, output_channels, in_channels):
     pool_size = 2
-    deconv_filter = tf.Variable(tf.random.truncated_normal([pool_size, pool_size, output_channels, in_channels], stddev=0.02)) #Parameter storage using tf.Variable
-    deconv = tf.nn.conv2d_transpose(x1, deconv_filter, tf.shape(input=x2), strides=[1, pool_size, pool_size, 1])
+    deconv_filter = tf.Variable(tf.truncated_normal([pool_size, pool_size, output_channels, in_channels], stddev=0.02))
+    deconv = tf.nn.conv2d_transpose(x1, deconv_filter, tf.shape(x2), strides=[1, pool_size, pool_size, 1])
 
     deconv_output = tf.concat([deconv, x2], 3)
     deconv_output.set_shape([None, None, None, output_channels * 2])
 
     return deconv_output
 
-
+tf.reset_default_graph() #Added by Hovsep
 def network(input):
-    conv1 = slim.conv2d(input, 32, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv1_1')
-    conv1 = slim.conv2d(conv1, 32, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv1_2')
+    conv1 = slim.conv2d(input, 32, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv1_1',reuse=tf.AUTO_REUSE)
+    conv1 = slim.conv2d(conv1, 32, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv1_2',reuse=tf.AUTO_REUSE)
     pool1 = slim.max_pool2d(conv1, [2, 2], padding='SAME')
 
-    conv2 = slim.conv2d(pool1, 64, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv2_1')
-    conv2 = slim.conv2d(conv2, 64, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv2_2')
+    conv2 = slim.conv2d(pool1, 64, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv2_1',reuse=tf.AUTO_REUSE)
+    conv2 = slim.conv2d(conv2, 64, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv2_2',reuse=tf.AUTO_REUSE)
     pool2 = slim.max_pool2d(conv2, [2, 2], padding='SAME')
 
-    conv3 = slim.conv2d(pool2, 128, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv3_1')
-    conv3 = slim.conv2d(conv3, 128, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv3_2')
+    conv3 = slim.conv2d(pool2, 128, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv3_1',reuse=tf.AUTO_REUSE)
+    conv3 = slim.conv2d(conv3, 128, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv3_2',reuse=tf.AUTO_REUSE)
     pool3 = slim.max_pool2d(conv3, [2, 2], padding='SAME')
 
-    conv4 = slim.conv2d(pool3, 256, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv4_1')
-    conv4 = slim.conv2d(conv4, 256, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv4_2')
+    conv4 = slim.conv2d(pool3, 256, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv4_1',reuse=tf.AUTO_REUSE)
+    conv4 = slim.conv2d(conv4, 256, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv4_2',reuse=tf.AUTO_REUSE)
     pool4 = slim.max_pool2d(conv4, [2, 2], padding='SAME')
 
-    conv5 = slim.conv2d(pool4, 512, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv5_1')
-    conv5 = slim.conv2d(conv5, 512, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv5_2')
+    conv5 = slim.conv2d(pool4, 512, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv5_1',reuse=tf.AUTO_REUSE)
+    conv5 = slim.conv2d(conv5, 512, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv5_2',reuse=tf.AUTO_REUSE)
 
     up6 = upsample_and_concat(conv5, conv4, 256, 512)
-    conv6 = slim.conv2d(up6, 256, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv6_1')
-    conv6 = slim.conv2d(conv6, 256, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv6_2')
+    conv6 = slim.conv2d(up6, 256, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv6_1',reuse=tf.AUTO_REUSE)
+    conv6 = slim.conv2d(conv6, 256, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv6_2',reuse=tf.AUTO_REUSE)
 
     up7 = upsample_and_concat(conv6, conv3, 128, 256)
-    conv7 = slim.conv2d(up7, 128, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv7_1')
-    conv7 = slim.conv2d(conv7, 128, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv7_2')
+    conv7 = slim.conv2d(up7, 128, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv7_1',reuse=tf.AUTO_REUSE)
+    conv7 = slim.conv2d(conv7, 128, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv7_2',reuse=tf.AUTO_REUSE)
 
     up8 = upsample_and_concat(conv7, conv2, 64, 128)
-    conv8 = slim.conv2d(up8, 64, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv8_1')
-    conv8 = slim.conv2d(conv8, 64, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv8_2')
+    conv8 = slim.conv2d(up8, 64, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv8_1',reuse=tf.AUTO_REUSE)
+    conv8 = slim.conv2d(conv8, 64, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv8_2',reuse=tf.AUTO_REUSE)
 
     up9 = upsample_and_concat(conv8, conv1, 32, 64)
-    conv9 = slim.conv2d(up9, 32, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv9_1')
-    conv9 = slim.conv2d(conv9, 32, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv9_2')
+    conv9 = slim.conv2d(up9, 32, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv9_1',reuse=tf.AUTO_REUSE)
+    conv9 = slim.conv2d(conv9, 32, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv9_2',reuse=tf.AUTO_REUSE)
 
-    conv10 = slim.conv2d(conv9, 12, [1, 1], rate=1, activation_fn=None, scope='g_conv10')
-    out = tf.compat.v1.depth_to_space(input=conv10, block_size=2)
+    conv10 = slim.conv2d(conv9, 12, [1, 1], rate=1, activation_fn=None, scope='g_conv10',reuse=tf.AUTO_REUSE)
+    out = tf.depth_to_space(conv10, 2)
     return out
-
+#reuse = tf.AUTO_REUSE added by Hovsep
 
 def pack_raw(raw):
     # pack Bayer image to 4 channels
@@ -103,19 +105,23 @@ def pack_raw(raw):
     return out
 
 
-sess = tf.compat.v1.Session()
-in_image = tf.compat.v1.placeholder(tf.float32, [None, None, None, 4])
-gt_image = tf.compat.v1.placeholder(tf.float32, [None, None, None, 3])
+sess = tf.Session()
+# tf.reset_default_graph() #Added by Hovsep
+in_image = tf.placeholder(tf.float32, [None, None, None, 4])
+gt_image = tf.placeholder(tf.float32, [None, None, None, 3])
 out_image = network(in_image)
 
-G_loss = tf.reduce_mean(input_tensor=tf.abs(out_image - gt_image))
+G_loss = tf.reduce_mean(tf.abs(out_image - gt_image)) #L1-Loss
+# G_loss = tf.reduce_mean(tf.nn.l2_loss(out_image-gt_image)) #L2-Loss
+# G_loss = tf.norm(out_image-gt_image, ord = 'euclidean')
 
-t_vars = tf.compat.v1.trainable_variables()
-lr = tf.compat.v1.placeholder(tf.float32)
-G_opt = tf.compat.v1.train.AdamOptimizer(learning_rate=lr).minimize(G_loss)
+t_vars = tf.trainable_variables()
+lr = tf.placeholder(tf.float32)
+# tf.reset_default_graph() #Added by Hovsep
+G_opt = tf.train.AdamOptimizer(learning_rate=lr).minimize(G_loss)
 
-saver = tf.compat.v1.train.Saver()
-sess.run(tf.compat.v1.global_variables_initializer())
+saver = tf.train.Saver()
+sess.run(tf.global_variables_initializer())
 ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
 if ckpt:
     print('loaded ' + ckpt.model_checkpoint_path)
@@ -136,14 +142,14 @@ for folder in allfolders:
     lastepoch = np.maximum(lastepoch, int(folder[-4:]))
 
 learning_rate = 1e-4
-for epoch in range(lastepoch, 4001):
+for epoch in tqdm(range(lastepoch, 2)):#4001 changed, tqdm added by Hovsep
     if os.path.isdir(result_dir + '%04d' % epoch):
         continue
     cnt = 0
     if epoch > 2000:
         learning_rate = 1e-5
 
-    for ind in np.random.permutation(len(train_ids)):
+    for ind in np.random.permutation(len(train_ids)):#len(train_ids) changed by Hovsep
         # get the path from image id
         train_id = train_ids[ind]
         in_files = glob.glob(input_dir + '%05d_00*.ARW' % train_id)
@@ -175,7 +181,7 @@ for epoch in range(lastepoch, 4001):
         xx = np.random.randint(0, W - ps)
         yy = np.random.randint(0, H - ps)
         input_patch = input_images[str(ratio)[0:3]][ind][:, yy:yy + ps, xx:xx + ps, :]
-        gt_patch = gt_images[ind][:, yy * 2:yy * 2 + ps * 2, xx * 2:xx * 2 + ps * 2, :] #A random 512x512 patch is cropped, flipped rotated for data augmentation
+        gt_patch = gt_images[ind][:, yy * 2:yy * 2 + ps * 2, xx * 2:xx * 2 + ps * 2, :]
 
         if np.random.randint(2, size=1)[0] == 1:  # random flip
             input_patch = np.flip(input_patch, axis=1)
@@ -203,5 +209,4 @@ for epoch in range(lastepoch, 4001):
             temp = np.concatenate((gt_patch[0, :, :, :], output[0, :, :, :]), axis=1)
             toimage(temp * 255, high=255, low=0, cmin=0, cmax=255).save(
                 result_dir + '%04d/%05d_00_train_%d.jpg' % (epoch, train_id, ratio))
-
     saver.save(sess, checkpoint_dir + 'model.ckpt')
