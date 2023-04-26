@@ -87,20 +87,16 @@ def pack_raw(raw):
     return out
 
 
-print(vars)
 
 sess = tf.compat.v1.Session()
-print(sess)
 in_image = tf.compat.v1.placeholder(tf.float32, [None, None, None, 4])
 gt_image = tf.compat.v1.placeholder(tf.float32, [None, None, None, 3])
 out_image = network(in_image)
 
 saver = tf.compat.v1.train.Saver()
-print(saver)
 sess.run(tf.compat.v1.global_variables_initializer())
 print(os.listdir(checkpoint_dir))
 ckpt_path = tf.train.latest_checkpoint(checkpoint_dir)
-print(ckpt_path)
 ckpt = tf.compat.v1.train.get_checkpoint_state(checkpoint_dir)
 
 if ckpt:
